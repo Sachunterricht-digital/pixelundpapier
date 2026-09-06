@@ -10,5 +10,6 @@ die Vorbereitung.
 | Reihe | Einheit | Adresse |
 |---|---|---|
 | Robotik ohne Roboter | 1, Können Roboter denken? | `robotik/1/` |
+| Robotik ohne Roboter | Übung, Zahnputz-Algorithmus | `robotik/uebungen/zahnputz/` |
 
 Keine Analytics, keine externen Skripte, kein Login, keine gespeicherten Eingaben.
