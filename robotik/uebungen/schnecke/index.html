@@ -185,9 +185,9 @@
 
     const LEVELS = [
         { title:"Geradeaus", task:"Die Schnecke schaut nach oben. Steuere sie geradeaus zum Rubin!", start:[4,2], target:[1,2], startDir:0, obstacles:[], optimal:3 },
-        { title:"Um die Ecke", task:"Jetzt musst du auch abbiegen! Denk daran: Erst drehen, dann vorwärts.", start:[4,0], target:[4,4], startDir:1, obstacles:[[4,2]], optimal:7 },
-        { title:"Zickzack", task:"Finde den Weg durch die Hindernisse. Plane sorgfältig!", start:[4,0], target:[0,4], startDir:0, obstacles:[[3,1],[2,2],[1,3]], optimal:12 },
-        { title:"Labyrinth", task:"Der schwerste Parcours! Kannst du den kürzesten Weg finden?", start:[4,0], target:[0,4], startDir:0, obstacles:[[3,0],[3,1],[2,2],[2,3],[1,1],[0,2]], optimal:14 }
+        { title:"Um die Ecke", task:"Jetzt musst du auch abbiegen! Denk daran: Erst drehen, dann vorwärts.", start:[4,0], target:[4,4], startDir:1, obstacles:[[4,2]], optimal:9 },
+        { title:"Zickzack", task:"Finde den Weg durch die Hindernisse. Plane sorgfältig!", start:[4,0], target:[0,4], startDir:0, obstacles:[[3,1],[2,2],[1,3]], optimal:9 },
+        { title:"Labyrinth", task:"Der schwerste Parcours! Kannst du den kürzesten Weg finden?", start:[4,0], target:[0,4], startDir:0, obstacles:[[3,0],[3,1],[2,2],[2,3],[1,1],[0,2]], optimal:10 }
     ];
 
     let currentLevel = 0, unlockedLevel = 0, commands = [], isRunning = false;
