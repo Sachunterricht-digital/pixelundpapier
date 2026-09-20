@@ -67,8 +67,9 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
 .placed text.name{font-family:Jost,sans-serif;font-size:16px;text-anchor:middle;fill:#1d3f50;pointer-events:none;font-weight:500}
 .placed.selected .select-ring,.path.selected .select-ring{display:block}
 .select-ring{display:none;fill:none;stroke:#f4c20d;stroke-width:5;stroke-dasharray:8 5;vector-effect:non-scaling-stroke;pointer-events:none}
-.path{cursor:pointer}
-.pending-dot{fill:#f4c20d;stroke:#2a5970;stroke-width:2}
+.rotate-line{stroke:#f4c20d;stroke-width:2;stroke-dasharray:3 3;opacity:.85;pointer-events:none}
+.rotate-handle{fill:#f4c20d;stroke:#1d3f50;stroke-width:2;cursor:grab;touch-action:none}
+.rotate-handle:active{cursor:grabbing}
 .empty-state{fill:#6b7f8b;font-family:Jost,sans-serif;font-size:17px;text-anchor:middle;pointer-events:none}
 .empty-bg{fill:#fffdf5;stroke:#f4c20d;stroke-width:2;stroke-dasharray:7 6;pointer-events:none}
 #zonen text{font-family:Fredoka,sans-serif;font-weight:600;font-size:96px;text-anchor:middle;dominant-baseline:middle;fill:#2a5970;opacity:.1;pointer-events:none}
@@ -95,6 +96,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   .workspace{display:block;padding:0}
   .hall-wrap{border:0;padding:0;box-shadow:none}
   .app{display:block}
+  #hall .select-ring,#hall .rotate-handle,#hall .rotate-line{display:none!important}
   #hall{width:252mm;max-width:100%;height:auto;box-shadow:none;border-radius:0;margin:0 auto;display:block}
   .stage{break-inside:avoid;page-break-inside:avoid;display:block}
   #printHead{display:block;font-family:Fredoka,sans-serif;color:#2a5970;font-size:20px;margin:0 0 7px;border-bottom:3px solid #f4c20d;padding-bottom:5px}
@@ -115,7 +117,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
         <circle cx="11" cy="16" r="3.8" fill="#f4c20d" stroke="#1d3f50" stroke-width="1.6"/>
         <path d="M29 31l5-8" stroke="#c0603f" stroke-width="2.8" stroke-linecap="round"/>
       </svg>
-      <div><h1>Hallenplan</h1><p>Baustein wählen, in die Halle tippen, mit dem Finger schieben.</p></div>
+      <div><h1>Hallenplan</h1><p>Baustein wählen, in die Halle tippen, verschieben, Pfeile am gelben Griff drehen.</p></div>
     </div>
     <input class="titlefield" id="planTitle" type="text" placeholder="Titel des Plans" aria-label="Titel des Plans">
     <div class="actions" aria-label="Datei und Verlauf">
@@ -160,7 +162,6 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
             <line x1="942" y1="286" x2="942" y2="334"/><circle cx="932" cy="310" r="10"/>
           </g>
           <g id="zonen"></g>
-          <g id="paths"></g>
           <g id="objects"></g>
           <rect id="emptyBg" class="empty-bg" x="355" y="280" width="290" height="58" rx="16"/>
           <text id="emptyState" class="empty-state" x="500" y="314">Wähle links einen Baustein.</text>
@@ -186,11 +187,15 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
       <div>
         <div class="selection-card"><strong id="selectionName">Nichts ausgewählt</strong><span id="selectionInfo">Tippe auf ein Objekt oder einen Weg.</span></div>
         <input class="labelfield" id="labelField" type="text" placeholder="Beschriftung" aria-label="Beschriftung des Objekts" disabled maxlength="24">
+        <div class="selection-actions" id="rotateActions" style="display:none;grid-template-columns:1fr 1fr">
+          <button class="tool" id="rotateLeftBtn" type="button" aria-label="Pfeil nach links drehen">↺ 45°</button>
+          <button class="tool" id="rotateRightBtn" type="button" aria-label="Pfeil nach rechts drehen">45° ↻</button>
+        </div>
         <div class="selection-actions"><button class="danger" id="deleteBtn" type="button" disabled>Auswahl löschen</button></div>
       </div>
       <div>
         <h3>Bedienung</h3>
-        <ol class="help"><li>Baustein antippen</li><li>In die Halle tippen</li><li>Objekt mit dem Finger verschieben</li><li>Der Plan sichert sich selbst</li></ol>
+        <ol class="help"><li>Baustein antippen</li><li>In die Halle tippen</li><li>Objekt mit dem Finger verschieben</li><li>Pfeile am gelben Griff drehen</li><li>Der Plan sichert sich selbst</li></ol>
       </div>
     </aside>
   </section>
@@ -200,37 +205,46 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   const NS='http://www.w3.org/2000/svg';
   const SPEICHER='pixelpapier.hallenplan.v2';
 
+  const ROTATABLE=new Set(['arrowStraight','arrowLeft','arrowRight','arrowCurve']);
   const flow=[
     {type:'station',label:'Station',fill:'#2a5970',icon:'<circle cx="20" cy="16" r="12" fill="#2a5970" stroke="#1d3f50" stroke-width="2"/><text x="20" y="17" text-anchor="middle" dominant-baseline="middle" font-family="Fredoka,sans-serif" font-size="14" font-weight="600" fill="#fff">1</text>'},
     {type:'start',label:'Start',fill:'#6f9a63',icon:'<path d="M8 29V4" stroke="#1d3f50" stroke-width="2.6" stroke-linecap="round"/><path d="M8 6h22l-5 6 5 6H8z" fill="#6f9a63" stroke="#1d3f50" stroke-width="2" stroke-linejoin="round"/>'},
     {type:'end',label:'Ende',fill:'#c0603f',icon:'<path d="M8 29V4" stroke="#1d3f50" stroke-width="2.6" stroke-linecap="round"/><path d="M8 6h22v12H8z" fill="#fff" stroke="#1d3f50" stroke-width="2"/><path d="M8 6h7.3v6H8zm14.6 0H30v6h-7.4zM15.3 12h7.3v6h-7.3z" fill="#1d3f50"/>'},
-    {type:'path',label:'Weg',fill:'#c0603f',icon:'<path d="M4 26C11 7 21 28 29 9" fill="none" stroke="#c0603f" stroke-width="3" stroke-linecap="round"/><path d="m25 9 5-1-1 5" fill="none" stroke="#c0603f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>'}
+    {type:'arrowStraight',label:'Pfeil gerade',fill:'#c0603f',icon:'<path d="M6 16H29" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round"/><path d="m23 9 7 7-7 7" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {type:'arrowLeft',label:'Pfeil links',fill:'#c0603f',icon:'<path d="M28 27V13H12" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="m19 6-7 7 7 7" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {type:'arrowRight',label:'Pfeil rechts',fill:'#c0603f',icon:'<path d="M12 27V13H28" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="m21 6 7 7-7 7" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>'},
+    {type:'arrowCurve',label:'Bogen',fill:'#c0603f',icon:'<path d="M6 24C6 8 34 8 34 24" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round"/><path d="m27 17 7 7-9 2" fill="none" stroke="#c0603f" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>'}
   ];
   const devices=[
     {type:'mat',label:'Matte',fill:'#8fae87',icon:'<rect x="4" y="9" width="32" height="15" rx="3" fill="#8fae87" stroke="#1d3f50" stroke-width="2"/><path d="M14 9v15M26 9v15" stroke="#1d3f50" stroke-width="1.6" opacity=".55"/>'},
+    {type:'matBig',label:'Matte groß',fill:'#4f86b0',icon:'<rect x="2" y="7" width="36" height="19" rx="4" fill="#4f86b0" stroke="#1d3f50" stroke-width="2.4"/><line x1="14" y1="7" x2="14" y2="26" stroke="#1d3f50" stroke-width="1.4" opacity=".5"/><line x1="26" y1="7" x2="26" y2="26" stroke="#1d3f50" stroke-width="1.4" opacity=".5"/>'},
     {type:'bench',label:'Bank',fill:'#cfa06a',icon:'<rect x="4" y="10" width="32" height="7" rx="2" fill="#cfa06a" stroke="#1d3f50" stroke-width="2"/><path d="M9 17v9M31 17v9" stroke="#1d3f50" stroke-width="2.4" stroke-linecap="round"/>'},
     {type:'box',label:'Kasten',fill:'#e0c18d',icon:'<rect x="7" y="5" width="26" height="23" rx="2" fill="#e0c18d" stroke="#1d3f50" stroke-width="2"/><path d="M7 12h26M7 20h26" stroke="#1d3f50" stroke-width="1.6" opacity=".6"/>'},
+    {type:'boxSmall',label:'Kasten niedrig',fill:'#e0c18d',icon:'<rect x="5" y="12" width="30" height="13" rx="2" fill="#e0c18d" stroke="#1d3f50" stroke-width="2.4"/><line x1="5" y1="18.5" x2="35" y2="18.5" stroke="#1d3f50" stroke-width="1.4" opacity=".55"/>'},
     {type:'cone',label:'Hütchen',fill:'#e08a3c',icon:'<path d="M20 4 30 25H10z" fill="#e08a3c" stroke="#1d3f50" stroke-width="2" stroke-linejoin="round"/><path d="M13.5 18h13" stroke="#fff" stroke-width="2.4" opacity=".8"/><rect x="7" y="25" width="26" height="4" rx="2" fill="#e08a3c" stroke="#1d3f50" stroke-width="2"/>'},
     {type:'ball',label:'Ball',fill:'#d9713f',icon:'<circle cx="20" cy="16" r="12" fill="#d9713f" stroke="#1d3f50" stroke-width="2"/><path d="M8.6 12c7 2 11.5 7.5 16.4 11.6M25 5.5c-5 6-7 12-6 20" fill="none" stroke="#1d3f50" stroke-width="1.7" opacity=".75"/>'},
     {type:'hoop',label:'Reifen',fill:'#f4c20d',icon:'<ellipse cx="20" cy="16" rx="15" ry="10" fill="none" stroke="#f4c20d" stroke-width="6"/><ellipse cx="20" cy="16" rx="15" ry="10" fill="none" stroke="#1d3f50" stroke-width="1.6"/>'},
+    {type:'hoopBasket',label:'Basketballkorb',fill:'#e08a3c',icon:'<rect x="12" y="3" width="16" height="5" rx="1.5" fill="#cfd8dd" stroke="#1d3f50" stroke-width="2.4"/><circle cx="20" cy="17" r="8" fill="none" stroke="#e08a3c" stroke-width="3.2"/><path d="M13 21l7 7 7-7" fill="none" stroke="#1d3f50" stroke-width="1.4" opacity=".55"/>'},
     {type:'pole',label:'Stange',fill:'#8fb3c4',icon:'<rect x="17.5" y="3" width="5" height="21" rx="2" fill="#8fb3c4" stroke="#1d3f50" stroke-width="2"/><ellipse cx="20" cy="26" rx="10" ry="3.5" fill="#8fb3c4" stroke="#1d3f50" stroke-width="2"/>'},
     {type:'hurdle',label:'Hürde',fill:'#b7cad6',icon:'<path d="M8 28V9M32 28V9" stroke="#1d3f50" stroke-width="2.4" stroke-linecap="round"/><rect x="4" y="9" width="32" height="6" rx="2" fill="#b7cad6" stroke="#1d3f50" stroke-width="2"/>'},
+    {type:'springboard',label:'Sprungbrett',fill:'#b7cad6',icon:'<rect x="4" y="9" width="32" height="16" rx="4" fill="#b7cad6" stroke="#1d3f50" stroke-width="2.4"/><rect x="9" y="13" width="22" height="8" rx="2" fill="#e08a3c" stroke="#1d3f50" stroke-width="1.4"/><line x1="12" y1="13" x2="16" y2="21" stroke="#1d3f50" stroke-width="1.2" opacity=".5"/><line x1="20" y1="13" x2="24" y2="21" stroke="#1d3f50" stroke-width="1.2" opacity=".5"/>'},
+    {type:'trampoline',label:'Trampolin',fill:'#8fb3c4',icon:'<circle cx="20" cy="16" r="13" fill="#8fb3c4" stroke="#1d3f50" stroke-width="2.4"/><circle cx="20" cy="16" r="8" fill="#46545c" stroke="#1d3f50" stroke-width="1.4"/>'},
     {type:'rope',label:'Seil',fill:'#c9a227',icon:'<path d="M3 18C8 4 14 27 20 14s10 11 17-3" fill="none" stroke="#c9a227" stroke-width="3.4" stroke-linecap="round"/>'},
-    {type:'goal',label:'Tor',fill:'#cfd8dd',icon:'<path d="M5 27V8h30v19" fill="#cfd8dd" stroke="#1d3f50" stroke-width="2" stroke-linejoin="round"/><path d="M5 8l7 6h23M12 14v13" fill="none" stroke="#1d3f50" stroke-width="1.7" opacity=".6"/>'}
+    {type:'goal',label:'Tor',fill:'#cfd8dd',icon:'<rect x="3" y="4" width="34" height="14" fill="#eef2f4" stroke="#1d3f50" stroke-width="1" opacity=".6"/><line x1="10" y1="4" x2="10" y2="18" stroke="#1d3f50" stroke-width=".8" opacity=".3"/><line x1="20" y1="4" x2="20" y2="18" stroke="#1d3f50" stroke-width=".8" opacity=".3"/><line x1="30" y1="4" x2="30" y2="18" stroke="#1d3f50" stroke-width=".8" opacity=".3"/><rect x="3" y="16" width="34" height="6" rx="1.5" fill="#cfd8dd" stroke="#1d3f50" stroke-width="2.2"/><rect x="1" y="15" width="5" height="9" rx="1.5" fill="#8fb3c4" stroke="#1d3f50" stroke-width="2"/><rect x="34" y="15" width="5" height="9" rx="1.5" fill="#8fb3c4" stroke="#1d3f50" stroke-width="2"/>'}
   ];
   const all=[...flow,...devices];
   const labels=Object.fromEntries(all.map(x=>[x.type,x.label]));
   const icons=Object.fromEntries(all.map(x=>[x.type,x.icon]));
 
-  const hall=document.getElementById('hall'), objectsLayer=document.getElementById('objects'), pathsLayer=document.getElementById('paths'), zonenLayer=document.getElementById('zonen');
+  const hall=document.getElementById('hall'), objectsLayer=document.getElementById('objects'), zonenLayer=document.getElementById('zonen');
   const emptyState=document.getElementById('emptyState'), emptyBg=document.getElementById('emptyBg'), statusEl=document.getElementById('status');
   const undoBtn=document.getElementById('undoBtn'), deleteBtn=document.getElementById('deleteBtn'), labelField=document.getElementById('labelField');
   const selectionName=document.getElementById('selectionName'), selectionInfo=document.getElementById('selectionInfo');
   const titleField=document.getElementById('planTitle'), zoneSelect=document.getElementById('zoneSelect');
 
-  const leer=()=>({objects:[],paths:[],basketball:true,zonen:0,titel:'',stationCounter:1});
+  const leer=()=>({objects:[],basketball:true,zonen:0,titel:'',stationCounter:1});
   let model=leer();
-  let history=[], activeTool=null, selected=null, pendingPath=null, drag=null, idCounter=1;
+  let history=[], activeTool=null, selected=null, drag=null, rotateDrag=null, idCounter=1;
 
   // Sichern und Laden
   function sichern(){
@@ -261,60 +275,93 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   function announce(text){statusEl.textContent=text}
   function snapshot(){history.push(JSON.stringify(model));if(history.length>40)history.shift();undoBtn.disabled=false}
   function setTool(type){
-    activeTool=type;pendingPath=null;
+    activeTool=type;
     document.querySelectorAll('.tool').forEach(b=>{const on=b.dataset.tool===type;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))});
-    announce(type?(type==='path'?'Startpunkt des Weges setzen':`${labels[type]} gewählt`):'Bereit');
+    announce(type?`${labels[type]} gewählt`:'Bereit');
     render();
   }
   function svgPoint(evt){const p=hall.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;const q=p.matrixTransform(hall.getScreenCTM().inverse());return{x:Math.max(58,Math.min(942,q.x)),y:Math.max(58,Math.min(562,q.y))}}
 
+  const rotateActions=document.getElementById('rotateActions');
   function select(kind,id){
     selected=id?{kind,id}:null;render();
     if(!selected){
-      selectionName.textContent='Nichts ausgewählt';selectionInfo.textContent='Tippe auf ein Objekt oder einen Weg.';
-      deleteBtn.disabled=true;labelField.disabled=true;labelField.value='';return;
+      selectionName.textContent='Nichts ausgewählt';selectionInfo.textContent='Tippe auf ein Objekt.';
+      deleteBtn.disabled=true;labelField.disabled=true;labelField.value='';rotateActions.style.display='none';return;
     }
-    const item=kind==='object'?model.objects.find(o=>o.id===id):model.paths.find(p=>p.id===id);
-    selectionName.textContent=kind==='path'?'Weg':labels[item.type];
-    selectionInfo.textContent=kind==='object'?'Verschieben, beschriften oder löschen.':'Kann gelöscht werden.';
+    const item=model.objects.find(o=>o.id===id);
+    if(!item){selected=null;rotateActions.style.display='none';return;}
+    selectionName.textContent=labels[item.type];
+    selectionInfo.textContent='Verschieben, beschriften oder löschen.';
     deleteBtn.disabled=false;
-    labelField.disabled=kind!=='object';
-    labelField.value=kind==='object'?(item.text||''):'';
+    labelField.disabled=false;
+    labelField.value=item.text||'';
+    rotateActions.style.display=ROTATABLE.has(item.type)?'grid':'none';
   }
 
   function addObject(type,p){
     snapshot();
-    const obj={id:`o${idCounter++}`,type,x:p.x,y:p.y,n:type==='station'?model.stationCounter++:null,text:''};
+    const obj={id:`o${idCounter++}`,type,x:p.x,y:p.y,n:type==='station'?model.stationCounter++:null,text:'',rot:0};
     model.objects.push(obj);select('object',obj.id);announce(`${labels[type]} gesetzt`);sichern();
   }
-  function addPathPoint(p){
-    if(!pendingPath){pendingPath=p;announce('Endpunkt des Weges setzen');render();return}
+  function rotateBy(deg){
+    if(!selected||selected.kind!=='object')return;
+    const o=model.objects.find(x=>x.id===selected.id);if(!o||!ROTATABLE.has(o.type))return;
     snapshot();
-    const path={id:`p${idCounter++}`,type:'path',x1:pendingPath.x,y1:pendingPath.y,x2:p.x,y2:p.y};
-    model.paths.push(path);pendingPath=null;select('path',path.id);announce('Weg gesetzt');sichern();
+    o.rot=((o.rot||0)+deg+360)%360;
+    render();sichern();announce('Gedreht');
+  }
+  document.getElementById('rotateLeftBtn').addEventListener('click',()=>rotateBy(-45));
+  document.getElementById('rotateRightBtn').addEventListener('click',()=>rotateBy(45));
+  function startRotate(e,o){
+    select('object',o.id);
+    rotateDrag={id:o.id,startRot:o.rot||0};
+    hall.setPointerCapture(e.pointerId);
   }
 
   function shapeFor(o,g){
     const a=(name,attrs)=>{const n=el(name,attrs);n.classList.add('shape');g.append(n);return n};
-    g.append(el('rect',{x:-34,y:-34,width:68,height:68,rx:8,class:'hit'}));
+    g.append(el('rect',{x:-45,y:-45,width:90,height:90,rx:10,class:'hit'}));
     if(o.type==='station'){a('circle',{cx:0,cy:0,r:24,fill:'#2a5970'});const t=el('text',{x:0,y:1,class:'num'});t.textContent=o.n;g.append(t)}
     if(o.type==='start'){a('line',{x1:-20,y1:26,x2:-20,y2:-26});a('path',{d:'M-20 -22H18L8 -9l10 13h-38Z',fill:'#6f9a63'})}
     if(o.type==='end'){
       a('line',{x1:-20,y1:26,x2:-20,y2:-26});a('rect',{x:-20,y:-22,width:38,height:24,fill:'#fff'});
       a('path',{d:'M-20 -22h12.6v12H-20Zm25.4 0H18v12H5.4ZM-7.4 -10H5.4V2H-7.4Z',fill:'#1d3f50',stroke:'none'});
     }
+    if(o.type==='arrowStraight'){g.append(el('line',{x1:-38,y1:0,x2:30,y2:0,fill:'none',stroke:'#c0603f','stroke-width':6,'stroke-linecap':'round','marker-end':'url(#arrowHead)'}))}
+    if(o.type==='arrowLeft'){g.append(el('path',{d:'M28 30V-6H-30',fill:'none',stroke:'#c0603f','stroke-width':6,'stroke-linecap':'round','stroke-linejoin':'round','marker-end':'url(#arrowHead)'}))}
+    if(o.type==='arrowRight'){g.append(el('path',{d:'M-28 30V-6H30',fill:'none',stroke:'#c0603f','stroke-width':6,'stroke-linecap':'round','stroke-linejoin':'round','marker-end':'url(#arrowHead)'}))}
+    if(o.type==='arrowCurve'){g.append(el('path',{d:'M-32 22Q0 -32 32 22',fill:'none',stroke:'#c0603f','stroke-width':6,'stroke-linecap':'round','marker-end':'url(#arrowHead)'}))}
     if(o.type==='mat'){a('rect',{x:-32,y:-19,width:64,height:38,rx:5,fill:'#8fae87'});a('line',{x1:-12,y1:-19,x2:-12,y2:19,opacity:.5});a('line',{x1:12,y1:-19,x2:12,y2:19,opacity:.5})}
+    if(o.type==='matBig'){a('rect',{x:-58,y:-34,width:116,height:68,rx:9,fill:'#4f86b0'});g.append(el('line',{x1:-19,y1:-34,x2:-19,y2:34,stroke:'#1d3f50','stroke-width':1.6,opacity:.5}));g.append(el('line',{x1:19,y1:-34,x2:19,y2:34,stroke:'#1d3f50','stroke-width':1.6,opacity:.5}))}
     if(o.type==='bench'){a('rect',{x:-33,y:-10,width:66,height:15,rx:3,fill:'#cfa06a'});a('line',{x1:-25,y1:5,x2:-25,y2:22});a('line',{x1:25,y1:5,x2:25,y2:22})}
     if(o.type==='box'){a('rect',{x:-26,y:-25,width:52,height:50,rx:4,fill:'#e0c18d'});a('line',{x1:-26,y1:-8,x2:26,y2:-8,opacity:.55});a('line',{x1:-26,y1:9,x2:26,y2:9,opacity:.55})}
+    if(o.type==='boxSmall'){a('rect',{x:-24,y:-13,width:48,height:26,rx:3,fill:'#e0c18d'});g.append(el('line',{x1:-24,y1:0,x2:24,y2:0,stroke:'#1d3f50','stroke-width':1.6,opacity:.55}))}
     if(o.type==='cone'){a('path',{d:'M0 -26 20 18H-20Z',fill:'#e08a3c'});a('line',{x1:-11,y1:4,x2:11,y2:4,stroke:'#fff','stroke-width':4});a('rect',{x:-24,y:18,width:48,height:7,rx:3,fill:'#e08a3c'})}
     if(o.type==='ball'){a('circle',{cx:0,cy:0,r:23,fill:'#d9713f'});a('path',{d:'M-19 -8C-5 -5 5 8 19 15M9 -21C-1 -7 -3 9 0 23',fill:'none',opacity:.75,'stroke-width':2})}
     if(o.type==='hoop'){a('ellipse',{cx:0,cy:0,rx:31,ry:20,fill:'none',stroke:'#f0b400','stroke-width':11});a('ellipse',{cx:0,cy:0,rx:31,ry:20,fill:'none','stroke-width':2})}
+    if(o.type==='hoopBasket'){a('rect',{x:-18,y:-32,width:36,height:8,rx:2,fill:'#cfd8dd'});g.append(el('circle',{cx:0,cy:-8,r:14,fill:'none',stroke:'#e08a3c','stroke-width':4}));g.append(el('path',{d:'M-10 3 0 15 10 3',fill:'none',stroke:'#1d3f50','stroke-width':1.6,opacity:.5}))}
     if(o.type==='pole'){a('rect',{x:-5,y:-28,width:10,height:44,rx:3,fill:'#8fb3c4'});a('ellipse',{cx:0,cy:19,rx:19,ry:7,fill:'#8fb3c4'})}
     if(o.type==='hurdle'){a('line',{x1:-24,y1:25,x2:-24,y2:-12});a('line',{x1:24,y1:25,x2:24,y2:-12});a('rect',{x:-31,y:-18,width:62,height:12,rx:3,fill:'#b7cad6'})}
+    if(o.type==='springboard'){a('rect',{x:-22,y:-16,width:44,height:32,rx:6,fill:'#b7cad6'});g.append(el('rect',{x:-16,y:-10,width:32,height:20,rx:4,fill:'#e08a3c',stroke:'#1d3f50','stroke-width':1.6}));g.append(el('line',{x1:-8,y1:-10,x2:-2,y2:10,stroke:'#1d3f50','stroke-width':1.3,opacity:.5}));g.append(el('line',{x1:6,y1:-10,x2:12,y2:10,stroke:'#1d3f50','stroke-width':1.3,opacity:.5}))}
+    if(o.type==='trampoline'){a('circle',{cx:0,cy:0,r:29,fill:'#8fb3c4'});g.append(el('circle',{cx:0,cy:0,r:19,fill:'#46545c',stroke:'#1d3f50','stroke-width':1.8}));g.append(el('line',{x1:-13,y1:-13,x2:13,y2:13,stroke:'#1d3f50','stroke-width':1,opacity:.35}));g.append(el('line',{x1:13,y1:-13,x2:-13,y2:13,stroke:'#1d3f50','stroke-width':1,opacity:.35}))}
     if(o.type==='rope'){a('path',{d:'M-32 8C-22 -26 -9 27 2 -3S20 20 32 -14',fill:'none',stroke:'#c9a227','stroke-width':5})}
-    if(o.type==='goal'){a('path',{d:'M-30 24V-22H30V24Z',fill:'#cfd8dd'});a('path',{d:'M-30 -22L-16 -9H30M-16 -9V24',fill:'none',opacity:.6,'stroke-width':2})}
+    if(o.type==='goal'){
+      g.append(el('rect',{x:-38,y:-30,width:76,height:30,fill:'#eef2f4',stroke:'#1d3f50','stroke-width':1.2,opacity:.5}));
+      for(let i=-30;i<=30;i+=12)g.append(el('line',{x1:i,y1:-30,x2:i,y2:0,stroke:'#1d3f50','stroke-width':.8,opacity:.28}));
+      for(let j=-28;j<0;j+=10)g.append(el('line',{x1:-38,y1:j,x2:38,y2:j,stroke:'#1d3f50','stroke-width':.8,opacity:.28}));
+      a('rect',{x:-38,y:-4,width:76,height:8,rx:2,fill:'#cfd8dd'});
+      a('rect',{x:-44,y:-9,width:9,height:18,rx:2,fill:'#8fb3c4'});
+      a('rect',{x:35,y:-9,width:9,height:18,rx:2,fill:'#8fb3c4'});
+    }
     if(o.text){const t=el('text',{x:0,y:44,class:'name'});t.textContent=o.text;g.append(t)}
     g.append(el('rect',{x:-38,y:-38,width:76,height:76,rx:10,class:'select-ring'}));
+    if(selected&&selected.kind==='object'&&selected.id===o.id&&ROTATABLE.has(o.type)){
+      g.append(el('line',{x1:0,y1:0,x2:52,y2:0,class:'rotate-line'}));
+      const handle=el('circle',{cx:52,cy:0,r:10,class:'rotate-handle'});
+      handle.addEventListener('pointerdown',e=>{e.stopPropagation();startRotate(e,o)});
+      g.append(handle);
+    }
   }
 
   function zonenZeichnen(){
@@ -334,22 +381,13 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   }
 
   function render(){
-    pathsLayer.innerHTML='';objectsLayer.innerHTML='';
+    objectsLayer.innerHTML='';
     zonenZeichnen();
-    model.paths.forEach(p=>{
-      const g=el('g',{class:`path${selected?.kind==='path'&&selected.id===p.id?' selected':''}`,'data-id':p.id});
-      g.append(el('line',{x1:p.x1,y1:p.y1,x2:p.x2,y2:p.y2,stroke:'#c0603f','stroke-width':6,'stroke-linecap':'round','marker-end':'url(#arrowHead)'}));
-      g.append(el('line',{x1:p.x1,y1:p.y1,x2:p.x2,y2:p.y2,stroke:'transparent','stroke-width':26}));
-      const ring=el('line',{x1:p.x1,y1:p.y1,x2:p.x2,y2:p.y2,class:'select-ring'});g.append(ring);
-      g.addEventListener('pointerdown',e=>{e.stopPropagation();select('path',p.id)});
-      pathsLayer.append(g);
-    });
-    if(pendingPath)pathsLayer.append(el('circle',{cx:pendingPath.x,cy:pendingPath.y,r:9,class:'pending-dot'}));
     model.objects.forEach(o=>{
-      const g=el('g',{class:`placed${selected?.kind==='object'&&selected.id===o.id?' selected':''}`,transform:`translate(${o.x} ${o.y})`,'data-id':o.id});
+      const g=el('g',{class:`placed${selected?.kind==='object'&&selected.id===o.id?' selected':''}`,transform:`translate(${o.x} ${o.y}) rotate(${o.rot||0})`,'data-id':o.id});
       shapeFor(o,g);g.addEventListener('pointerdown',e=>startDrag(e,o));objectsLayer.append(g);
     });
-    const showEmpty=!(model.objects.length||model.paths.length||activeTool);
+    const showEmpty=!(model.objects.length||activeTool);
     emptyState.style.display=showEmpty?'block':'none';emptyBg.style.display=showEmpty?'block':'none';
     document.getElementById('basketballLines').style.opacity=model.basketball?'.5':'0';
     document.getElementById('basketToggle').checked=model.basketball;
@@ -367,8 +405,29 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   }
 
   function startDrag(e,o){e.stopPropagation();select('object',o.id);const p=svgPoint(e);drag={id:o.id,dx:o.x-p.x,dy:o.y-p.y,startX:o.x,startY:o.y,moved:false};hall.setPointerCapture(e.pointerId)}
-  hall.addEventListener('pointermove',e=>{if(!drag)return;const p=svgPoint(e),o=model.objects.find(x=>x.id===drag.id);if(!o)return;o.x=p.x+drag.dx;o.y=p.y+drag.dy;drag.moved=drag.moved||Math.hypot(o.x-drag.startX,o.y-drag.startY)>3;render()});
+  hall.addEventListener('pointermove',e=>{
+    if(rotateDrag){
+      const o=model.objects.find(x=>x.id===rotateDrag.id);if(!o)return;
+      const p=svgPoint(e);
+      const deg=Math.atan2(p.y-o.y,p.x-o.x)*180/Math.PI;
+      o.rot=((deg%360)+360)%360;
+      render();
+      return;
+    }
+    if(!drag)return;
+    const p=svgPoint(e),o=model.objects.find(x=>x.id===drag.id);if(!o)return;o.x=p.x+drag.dx;o.y=p.y+drag.dy;drag.moved=drag.moved||Math.hypot(o.x-drag.startX,o.y-drag.startY)>3;render();
+  });
   hall.addEventListener('pointerup',e=>{
+    if(rotateDrag){
+      const o=model.objects.find(x=>x.id===rotateDrag.id);
+      if(o){
+        const endRot=o.rot,startRot=rotateDrag.startRot;
+        o.rot=startRot;snapshot();o.rot=endRot;
+        announce('Gedreht');sichern();render();
+      }
+      rotateDrag=null;
+      return;
+    }
     if(drag){
       const d=drag;drag=null;
       if(d.moved){
@@ -378,15 +437,14 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
       }
       return;
     }
-    if(activeTool){const p=svgPoint(e);activeTool==='path'?addPathPoint(p):addObject(activeTool,p)}
+    if(activeTool){const p=svgPoint(e);addObject(activeTool,p)}
     else select(null,null);
   });
-  hall.addEventListener('pointercancel',()=>{drag=null;render()});
+  hall.addEventListener('pointercancel',()=>{drag=null;rotateDrag=null;render()});
 
   function removeSelected(){
     if(!selected)return;snapshot();
-    if(selected.kind==='object')model.objects=model.objects.filter(o=>o.id!==selected.id);
-    else model.paths=model.paths.filter(p=>p.id!==selected.id);
+    model.objects=model.objects.filter(o=>o.id!==selected.id);
     selected=null;select(null,null);announce('Auswahl gelöscht');sichern();
   }
   deleteBtn.addEventListener('click',removeSelected);
@@ -399,12 +457,12 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   zoneSelect.addEventListener('change',e=>{snapshot();model.zonen=parseInt(e.target.value,10)||0;render();sichern();announce(model.zonen?`Halle in ${model.zonen} Bereiche geteilt`:'Teilung aus')});
   undoBtn.addEventListener('click',()=>{
     if(!history.length)return;
-    model=JSON.parse(history.pop());selected=null;pendingPath=null;undoBtn.disabled=!history.length;
+    model=JSON.parse(history.pop());selected=null;undoBtn.disabled=!history.length;
     select(null,null);announce('Letzten Schritt rückgängig gemacht');sichern();
   });
   document.getElementById('basketToggle').addEventListener('change',e=>{snapshot();model.basketball=e.target.checked;render();sichern();announce(model.basketball?'Basketballlinien eingeblendet':'Basketballlinien ausgeblendet')});
   document.getElementById('resetBtn').addEventListener('click',()=>{
-    if((model.objects.length||model.paths.length)&&!confirm('Den gesamten Hallenplan leeren?'))return;
+    if(model.objects.length&&!confirm('Den gesamten Hallenplan leeren?'))return;
     snapshot();model=leer();selected=null;setTool(null);select(null,null);announce('Plan zurückgesetzt');sichern();
   });
   document.getElementById('printBtn').addEventListener('click',()=>window.print());
@@ -412,7 +470,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   document.getElementById('pngBtn').addEventListener('click',()=>{
     const clone=hall.cloneNode(true);
     clone.setAttribute('width','2000');clone.setAttribute('height','1240');
-    clone.querySelectorAll('.select-ring').forEach(n=>n.remove());
+    clone.querySelectorAll('.select-ring,.rotate-handle,.rotate-line').forEach(n=>n.remove());
     clone.querySelector('#emptyState')?.remove();clone.querySelector('#emptyBg')?.remove();
     const exportStyle=el('style');
     let fontRules='';
@@ -450,17 +508,19 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
 
   if(new URLSearchParams(location.search).get('demo')==='example'){
     model={basketball:true,zonen:parseInt(new URLSearchParams(location.search).get('z')||'0',10),titel:'Stationsbetrieb Turnen',stationCounter:5,objects:[
-      {id:'o1',type:'start',x:110,y:500,n:null,text:''},{id:'o2',type:'station',x:240,y:450,n:1,text:'Balancieren'},
-      {id:'o3',type:'bench',x:240,y:522,n:null,text:''},{id:'o4',type:'station',x:400,y:210,n:2,text:'Rollen'},
-      {id:'o5',type:'mat',x:400,y:285,n:null,text:''},{id:'o6',type:'station',x:645,y:200,n:3,text:'Springen'},
-      {id:'o7',type:'box',x:645,y:280,n:null,text:''},{id:'o8',type:'station',x:810,y:440,n:4,text:'Zielwerfen'},
-      {id:'o9',type:'hoop',x:810,y:512,n:null,text:''},{id:'o10',type:'end',x:900,y:360,n:null,text:''},
-      {id:'o11',type:'cone',x:310,y:350,n:null,text:''},{id:'o12',type:'cone',x:480,y:390,n:null,text:''},
-      {id:'o13',type:'ball',x:560,y:490,n:null,text:''},{id:'o14',type:'hurdle',x:720,y:380,n:null,text:''}
-    ],paths:[
-      {id:'p1',type:'path',x1:135,y1:487,x2:205,y2:462},{id:'p2',type:'path',x1:272,y1:428,x2:372,y2:248},
-      {id:'p3',type:'path',x1:434,y1:212,x2:605,y2:203},{id:'p4',type:'path',x1:678,y1:226,x2:782,y2:414},
-      {id:'p5',type:'path',x1:840,y1:424,x2:876,y2:378}
+      {id:'o1',type:'start',x:110,y:500,n:null,text:'',rot:0},{id:'o2',type:'station',x:240,y:450,n:1,text:'Balancieren',rot:0},
+      {id:'o3',type:'bench',x:240,y:522,n:null,text:'',rot:0},{id:'o4',type:'station',x:400,y:210,n:2,text:'Rollen',rot:0},
+      {id:'o5',type:'mat',x:400,y:285,n:null,text:'',rot:0},{id:'o6',type:'station',x:645,y:200,n:3,text:'Springen',rot:0},
+      {id:'o7',type:'box',x:645,y:280,n:null,text:'',rot:0},{id:'o8',type:'station',x:810,y:440,n:4,text:'Zielwerfen',rot:0},
+      {id:'o9',type:'hoop',x:810,y:512,n:null,text:'',rot:0},{id:'o10',type:'end',x:900,y:360,n:null,text:'',rot:0},
+      {id:'o11',type:'cone',x:310,y:350,n:null,text:'',rot:0},{id:'o12',type:'cone',x:480,y:390,n:null,text:'',rot:0},
+      {id:'o13',type:'ball',x:560,y:490,n:null,text:'',rot:0},{id:'o14',type:'hurdle',x:720,y:380,n:null,text:'',rot:0},
+      {id:'o15',type:'matBig',x:150,y:150,n:null,text:'',rot:0},{id:'o16',type:'boxSmall',x:180,y:420,n:null,text:'',rot:0},
+      {id:'o17',type:'hoopBasket',x:900,y:110,n:null,text:'',rot:0},{id:'o18',type:'springboard',x:280,y:130,n:null,text:'',rot:0},
+      {id:'o19',type:'trampoline',x:915,y:500,n:null,text:'',rot:0},{id:'o20',type:'goal',x:500,y:555,n:null,text:'',rot:0},
+      {id:'o21',type:'arrowStraight',x:170,y:475,n:null,text:'',rot:340},{id:'o22',type:'arrowStraight',x:322,y:338,n:null,text:'',rot:299},
+      {id:'o23',type:'arrowStraight',x:520,y:208,n:null,text:'',rot:357},{id:'o24',type:'arrowStraight',x:730,y:320,n:null,text:'',rot:61},
+      {id:'o25',type:'arrowLeft',x:858,y:401,n:null,text:'',rot:308}
     ]};
     idCounter=30;
   } else {
