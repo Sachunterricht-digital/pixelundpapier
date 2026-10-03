@@ -394,17 +394,12 @@ main{align-items:center}.tafel{margin-block:auto}.karten{gap:18px}.karte{padding
 .ztitel{font-family:var(--font-headline);font-size:1.35em;text-align:center;
   color:var(--ink);letter-spacing:.02em}
 .zspalten{display:grid;grid-template-columns:1fr 1fr;gap:1.4em}
-.zspalte{display:flex;flex-direction:column;gap:.42em}
+.zspalte{display:flex;flex-direction:column;gap:.5em}
 .zkopf{font-family:var(--font-headline);font-size:1.02em;color:var(--akzent);
   border-bottom:1.4px solid var(--akzent);padding-bottom:.18em}
-.zunter{font-size:.82em;color:var(--muted);margin-top:-.24em}
-.zzeile{display:flex;align-items:center;gap:.6em}
-.zkasten{flex:0 0 auto;width:1.35em;height:1.35em;border:1.5px solid var(--ink);
-  border-radius:.15em;display:inline-flex;align-items:center;justify-content:center;
-  font-family:var(--font-headline);font-size:1em;line-height:1}
-.zkasten.gesetzt{color:var(--ton)}
-.zname{font-size:1.02em}
-.zline{flex:1;border-bottom:1.2px solid var(--line);height:1.15em}
+.zline{height:2.2em;border-bottom:1.2px solid var(--line);display:flex;
+  align-items:flex-end;padding:0 .3em .15em}
+.zname{font-size:1.1em;color:var(--ton)}
 .zregel{font-size:.78em;color:var(--muted);text-align:center;
   border-top:1px dashed var(--line);padding-top:.5em}
 .zoomfenster{container-type:size}.zoomfenster .zettel{font-size:4.2cqw;border-width:.22em;height:100%;justify-content:center;gap:1.4em;padding:1.6em 2em}.zoomfenster .ztitel{font-size:1.5em}.zoomfenster .zregel{font-size:.72em}</style></head><body><header><div class="wort">Was du jetzt wei&szlig;t</div><nav><button data-zu="0" class="an">Stimmt das</button><button data-zu="1">Rangfolge</button><button data-zu="2">Satzanf&auml;nge</button><button data-zu="3">Das wei&szlig; ich</button></nav></header><main><section class="tafel an" data-nr="0" data-regie="Zwei Runden, dazwischen wird geredet"><h2>Stimmt <span class='mark'>das</span>?</h2>
@@ -419,7 +414,7 @@ main{align-items:center}.tafel{margin-block:auto}.karten{gap:18px}.karte{padding
       <button class="rundenknopf an" data-runde="1">Erste Runde</button>
       <button class="rundenknopf" data-runde="2">Zweite Runde</button>
     </div>
-  </div><div class="satz leise">Erste Runde, dann das Gespr&auml;ch, dann die zweite. Wer den Platz wechselt, sagt warum.</div></section><section class="tafel" data-nr="1" data-regie="Ordnen lassen, es gibt keine richtige Loesung"><h2>Welche Regel ist die <span class='mark'>wichtigste</span>?</h2><div class="rangfeld">
+  </div><div class="satz leise">Erst die erste Runde, dann das Gespr&auml;ch, dann die zweite Runde. Wer den Platz wechselt, sagt warum.</div></section><section class="tafel" data-nr="1" data-regie="Ordnen lassen, es gibt keine richtige Loesung"><h2>Welche Regel ist die <span class='mark'>wichtigste</span>?</h2><div class="rangfeld">
     <div class="rangkarte" style="order:0">
       <span class="rangnr">1</span>
       <button class="rangtext" data-rangtext>
@@ -476,14 +471,14 @@ main{align-items:center}.tafel{margin-block:auto}.karten{gap:18px}.karte{padding
     <button class="weiter" data-satzweiter>N&auml;chster Satzanfang</button>
   </div></section><section class="tafel" data-nr="3" data-regie="Drei Saetze an die Tafel"><h2>Das wei&szlig; ich <span class='mark'>jetzt</span></h2>
   <div class="merk">
-    <p><b>Ein Amt ist kein Beruf.</b> In ein Amt wird man gew&auml;hlt, und man gibt es
+    <p><b>Ein Amt ist kein Beruf.</b> In ein Amt wird man gew&auml;hlt und man gibt es
        nach einer Zeit wieder ab. In einen Beruf wird man eingestellt.</p>
-    <p><b>Gew&auml;hlt wird &uuml;berall.</b> In der Klasse, in der Gemeinde und im
+    <p><b>Gew&auml;hlt wird &uuml;berall:</b> in der Klasse, in der Gemeinde und im
        ganzen Land. Immer dann, wenn jemand f&uuml;r andere sprechen soll.</p>
-    <p><b>F&uuml;nf Regeln, jedes Mal.</b> allgemein, unmittelbar, frei, gleich und
+    <p><b>F&uuml;nf Regeln, jedes Mal:</b> allgemein, unmittelbar, frei, gleich und
        geheim. Auch bei den Erwachsenen.</p>
   </div>
-  <div class="satz leise">Wo in eurem Ort wird noch gew&auml;hlt?</div></section></main><footer><span><b>Pixel &amp; Papier</b> · Thomas Hermann · © 2026, Nutzung im eigenen Unterricht, Weitergabe nicht gestattet</span><span class="regie" id="regie"></span></footer><script>
+  <div class="satz leise">Wo in eurem Ort wird noch gew&auml;hlt?</div></section></main><footer><span><b>Papier &amp; Pixel</b> · Thomas Hermann · © 2026, Nutzung im eigenen Unterricht, Weitergabe nicht gestattet</span><span class="regie" id="regie"></span></footer><script>
 const tafeln=[...document.querySelectorAll('.tafel')];
 const knoepfe=[...document.querySelectorAll('nav button')];
 const regie=document.getElementById('regie');
