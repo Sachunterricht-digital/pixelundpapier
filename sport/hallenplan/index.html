@@ -90,7 +90,29 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   #hall{min-height:340px}.brand p{display:none}
 }
 @page{size:A4 landscape;margin:12mm}
-@media print{
+.objbar{position:absolute;z-index:6;display:flex;gap:6px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:5px;box-shadow:0 8px 22px rgba(25,36,45,.2);transform:translate(-50%,-100%)}
+.objbar.unten{transform:translate(-50%,0)}
+.objbar button{min-width:44px;height:44px;padding:0 10px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--petrol);font:600 19px Fredoka,sans-serif;cursor:pointer}
+.objbar button.del{background:#c0603f;border-color:#c0603f;color:#fff}
+.objbar input{height:44px;width:150px;border:1px solid var(--petrol);border-radius:10px;padding:0 10px;font-size:16px}
+.toolchip{position:absolute;left:12px;top:12px;z-index:6;display:flex;align-items:center;gap:10px;background:#fffaee;border:1px solid var(--gelb);border-radius:12px;padding:5px 5px 5px 12px;font-size:14px;color:var(--petrol);box-shadow:0 4px 12px rgba(25,36,45,.12)}
+.toolchip button{height:36px;padding:0 14px;border-radius:9px;border:0;background:var(--petrol);color:#fff;font:600 14px Fredoka,sans-serif;cursor:pointer}
+.objbar[hidden],.toolchip[hidden],.objbar [hidden]{display:none!important}
+@media(hover:none){.tasten{display:none}}
+#hall.hoch .placed text.name{font-size:21px}
+@media(max-width:720px){
+  .stage{min-height:0}
+  .hall-wrap{flex:none;padding:6px}
+  #hall{min-height:0;height:auto}
+  .workspace{min-width:0}
+  .palette{min-width:0;max-width:100%;position:sticky;bottom:0;z-index:10;display:flex;gap:7px;overflow-x:auto;padding:8px;border-radius:16px 16px 0 0;box-shadow:0 -8px 20px rgba(42,89,112,.14);-webkit-overflow-scrolling:touch}
+  .palette h2,.palette h3{display:none}
+  .palette .tool-grid{display:contents}
+  .palette .tool{flex:0 0 72px;min-height:64px;font-size:11.5px}
+}
+@media(max-width:720px) and (orientation:portrait){#hall{aspect-ratio:620/1000}}
+@media print{.objbar,.toolchip{display:none!important}
+
   html,body{background:#fff}
   .topbar,.palette,.settings,.hint{display:none!important}
   .workspace{display:block;padding:0}
@@ -145,6 +167,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
           <defs>
             <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#c0603f"/></marker>
           </defs>
+          <g id="drehen">
           <rect x="35" y="35" width="930" height="550" rx="10" fill="#fff" stroke="#2a5970" stroke-width="5"/>
           <g id="courtLines" fill="none" stroke="#708269" stroke-width="3" opacity=".7">
             <line x1="500" y1="35" x2="500" y2="585"/>
@@ -163,12 +186,21 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
           </g>
           <g id="zonen"></g>
           <g id="objects"></g>
+          </g>
           <rect id="emptyBg" class="empty-bg" x="355" y="280" width="290" height="58" rx="16"/>
           <text id="emptyState" class="empty-state" x="500" y="314">Wähle links einen Baustein.</text>
         </svg>
+        <div id="objBar" class="objbar" hidden>
+          <button type="button" id="barLabel" aria-label="Beschriften">Aa</button>
+          <input id="barText" type="text" maxlength="24" placeholder="Beschriftung" aria-label="Beschriftung" hidden>
+          <button type="button" id="barLeft" aria-label="Nach links drehen">↺</button>
+          <button type="button" id="barRight" aria-label="Nach rechts drehen">↻</button>
+          <button type="button" id="barDel" class="del" aria-label="Löschen">✕</button>
+        </div>
+        <div id="toolChip" class="toolchip" hidden><span id="chipText"></span><button type="button" id="chipDone">Fertig</button></div>
       </div>
       <div id="printLeg"></div>
-      <div class="hint"><span id="status" role="status">Bereit</span><span>Entf löscht · Esc bricht ab</span></div>
+      <div class="hint"><span id="status" role="status">Bereit</span><span class="tasten">Entf löscht · Esc bricht ab</span></div>
     </section>
 
     <aside class="panel settings">
@@ -278,9 +310,25 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     activeTool=type;
     document.querySelectorAll('.tool').forEach(b=>{const on=b.dataset.tool===type;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))});
     announce(type?`${labels[type]} gewählt`:'Bereit');
+    document.getElementById('toolChip').hidden=!type;
+    if(type)document.getElementById('chipText').textContent=`${labels[type]} setzen`;
     render();
   }
-  function svgPoint(evt){const p=hall.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;const q=p.matrixTransform(hall.getScreenCTM().inverse());return{x:Math.max(58,Math.min(942,q.x)),y:Math.max(58,Math.min(562,q.y))}}
+  // Am Handy im Hochformat liegt die Halle gedreht, damit Geräte groß genug zum Antippen sind.
+  // Modell und Druck bleiben quer: (x,y) im Modell liegt bei (620-y, x) auf dem Bildschirm.
+  const drehen=document.getElementById('drehen'), hochfrage=matchMedia('(max-width:720px) and (orientation:portrait)');
+  let HOCH=false;
+  function modusSetzen(hoch){
+    HOCH=hoch;
+    hall.setAttribute('viewBox',HOCH?'0 0 620 1000':'0 0 1000 620');
+    hall.classList.toggle('hoch',HOCH);
+    if(HOCH)drehen.setAttribute('transform','translate(620 0) rotate(90)');else drehen.removeAttribute('transform');
+    const cx=HOCH?310:500, cy=HOCH?500:310;
+    emptyBg.setAttribute('x',cx-145);emptyBg.setAttribute('y',cy-30);
+    emptyState.setAttribute('x',cx);emptyState.setAttribute('y',cy+4);
+    emptyState.textContent=HOCH?'Wähle unten einen Baustein.':'Wähle links einen Baustein.';
+  }
+  function svgPoint(evt){const p=hall.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;let q=p.matrixTransform(hall.getScreenCTM().inverse());if(HOCH)q={x:q.y,y:620-q.x};return{x:Math.max(58,Math.min(942,q.x)),y:Math.max(58,Math.min(562,q.y))}}
 
   const rotateActions=document.getElementById('rotateActions');
   function select(kind,id){
@@ -376,7 +424,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     for(let j=1;j<rows;j++)zonenLayer.append(el('line',{x1:x0,y1:y0+j*bh,x2:x0+w,y2:y0+j*bh}));
     let nr=1;
     for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){
-      const t=el('text',{x:x0+i*bw+bw/2,y:y0+j*bh+bh/2});t.textContent=nr++;zonenLayer.append(t);
+      const tx=x0+i*bw+bw/2,ty=y0+j*bh+bh/2,t=el('text',{x:tx,y:ty});if(HOCH)t.setAttribute('transform',`rotate(-90 ${tx} ${ty})`);t.textContent=nr++;zonenLayer.append(t);
     }
   }
 
@@ -384,8 +432,13 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     objectsLayer.innerHTML='';
     zonenZeichnen();
     model.objects.forEach(o=>{
-      const g=el('g',{class:`placed${selected?.kind==='object'&&selected.id===o.id?' selected':''}`,transform:`translate(${o.x} ${o.y}) rotate(${o.rot||0})`,'data-id':o.id});
+      const g=el('g',{class:`placed${selected?.kind==='object'&&selected.id===o.id?' selected':''}`,transform:`translate(${o.x} ${o.y}) rotate(${o.rot||0})${HOCH?' scale(1.25)':''}`,'data-id':o.id});
       shapeFor(o,g);g.addEventListener('pointerdown',e=>startDrag(e,o));objectsLayer.append(g);
+      if(HOCH)g.querySelectorAll('text').forEach(t=>{
+        const r=-(o.rot||0)*Math.PI/180;let x=+t.getAttribute('x')||0,y=+t.getAttribute('y')||0;
+        if(t.classList.contains('name')){x=44*Math.cos(r)+0;y=44*Math.sin(r);t.setAttribute('x',x);t.setAttribute('y',y)}
+        t.setAttribute('transform',`rotate(${-90-(o.rot||0)} ${x} ${y})`);
+      });
     });
     const showEmpty=!(model.objects.length||activeTool);
     emptyState.style.display=showEmpty?'block':'none';emptyBg.style.display=showEmpty?'block':'none';
@@ -394,7 +447,32 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     zoneSelect.value=String(model.zonen|0);
     if(titleField.value!==model.titel)titleField.value=model.titel||'';
     legendeBauen();
+    leisteZeigen();
   }
+
+  const objBar=document.getElementById('objBar'), barText=document.getElementById('barText'), wrap=hall.parentElement;
+  function leisteZeigen(){
+    const g=selected&&selected.kind==='object'&&!(drag&&drag.moved)&&!rotateDrag?objectsLayer.querySelector(`[data-id="${selected.id}"]`):null;
+    if(!g){objBar.hidden=true;barText.hidden=true;return}
+    const o=model.objects.find(x=>x.id===selected.id);
+    document.getElementById('barLeft').hidden=document.getElementById('barRight').hidden=!ROTATABLE.has(o.type);
+    objBar.hidden=false;
+    const r=(g.querySelector('.hit')||g).getBoundingClientRect(), w=wrap.getBoundingClientRect(), bw=objBar.offsetWidth;
+    let left=r.left-w.left+r.width/2;left=Math.max(bw/2+4,Math.min(w.width-bw/2-4,left));
+    const oben=r.top-w.top-6;
+    objBar.classList.toggle('unten',oben<objBar.offsetHeight+4);
+    objBar.style.left=left+'px';objBar.style.top=(oben<objBar.offsetHeight+4?r.bottom-w.top+6:oben)+'px';
+  }
+  document.getElementById('barDel').addEventListener('click',()=>removeSelected());
+  document.getElementById('barLeft').addEventListener('click',()=>rotateBy(-45));
+  document.getElementById('barRight').addEventListener('click',()=>rotateBy(45));
+  document.getElementById('barLabel').addEventListener('click',()=>{
+    const o=selected&&model.objects.find(x=>x.id===selected.id);if(!o)return;
+    barText.hidden=!barText.hidden;barText.value=o.text||'';leisteZeigen();if(!barText.hidden)barText.focus();
+  });
+  barText.addEventListener('input',()=>{labelField.value=barText.value;labelField.dispatchEvent(new Event('input'))});
+  barText.addEventListener('keydown',e=>{if(e.key==='Enter'){barText.hidden=true;barText.blur();leisteZeigen()}});
+  addEventListener('resize',()=>leisteZeigen());addEventListener('scroll',()=>leisteZeigen(),{passive:true});
 
   function legendeBauen(){
     const box=document.getElementById('printLeg');
@@ -465,10 +543,17 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     if(model.objects.length&&!confirm('Den gesamten Hallenplan leeren?'))return;
     snapshot();model=leer();selected=null;setTool(null);select(null,null);announce('Plan zurückgesetzt');sichern();
   });
+  document.getElementById('chipDone').addEventListener('click',()=>setTool(null));
   document.getElementById('printBtn').addEventListener('click',()=>window.print());
+  // Druck und PNG immer quer
+  addEventListener('beforeprint',()=>{if(HOCH){modusSetzen(false);render()}});
+  addEventListener('afterprint',()=>{modusSetzen(hochfrage.matches);render()});
+  hochfrage.addEventListener('change',e=>{modusSetzen(e.matches);render()});
 
   document.getElementById('pngBtn').addEventListener('click',()=>{
+    const warHoch=HOCH;if(warHoch){modusSetzen(false);render()}
     const clone=hall.cloneNode(true);
+    if(warHoch){modusSetzen(true);render()}
     clone.setAttribute('width','2000');clone.setAttribute('height','1240');
     clone.querySelectorAll('.select-ring,.rotate-handle,.rotate-line').forEach(n=>n.remove());
     clone.querySelector('#emptyState')?.remove();clone.querySelector('#emptyBg')?.remove();
@@ -527,6 +612,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     if(laden())announce('Letzter Plan wiederhergestellt');
   }
 
+  modusSetzen(hochfrage.matches);
   render();
 })();
 </script>
