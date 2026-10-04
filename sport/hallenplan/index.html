@@ -94,12 +94,17 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
 .objbar.unten{transform:translate(-50%,0)}
 .objbar button{min-width:44px;height:44px;padding:0 10px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--petrol);font:600 19px Fredoka,sans-serif;cursor:pointer}
 .objbar button.del{background:#c0603f;border-color:#c0603f;color:#fff}
-.objbar input{height:44px;width:150px;border:1px solid var(--petrol);border-radius:10px;padding:0 10px;font-size:16px}
+.objbar input{height:44px;width:128px;border:1px solid var(--petrol);border-radius:10px;padding:0 10px;font-size:16px}
 .toolchip{position:absolute;left:12px;top:12px;z-index:6;display:flex;align-items:center;gap:10px;background:#fffaee;border:1px solid var(--gelb);border-radius:12px;padding:5px 5px 5px 12px;font-size:14px;color:var(--petrol);box-shadow:0 4px 12px rgba(25,36,45,.12)}
 .toolchip button{height:36px;padding:0 14px;border-radius:9px;border:0;background:var(--petrol);color:#fff;font:600 14px Fredoka,sans-serif;cursor:pointer}
+.geist{position:fixed;z-index:50;width:64px;height:52px;margin:-26px 0 0 -32px;padding:6px;border-radius:12px;background:#fff;border:2px dashed var(--line);box-shadow:0 10px 24px rgba(25,36,45,.25);pointer-events:none;opacity:.9}
+.geist.drin{border-color:var(--petrol);border-style:solid}
+.geist svg{width:100%;height:100%;overflow:visible}
+.tool{touch-action:pan-x}
 .objbar[hidden],.toolchip[hidden],.objbar [hidden]{display:none!important}
 @media(hover:none){.tasten{display:none}}
 #hall.hoch .placed text.name{font-size:21px}
+#hall.hoch .empty-state{font-size:25px}
 @media(max-width:720px){
   .stage{min-height:0}
   .hall-wrap{flex:none;padding:6px}
@@ -197,7 +202,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
           <button type="button" id="barRight" aria-label="Nach rechts drehen">↻</button>
           <button type="button" id="barDel" class="del" aria-label="Löschen">✕</button>
         </div>
-        <div id="toolChip" class="toolchip" hidden><span id="chipText"></span><button type="button" id="chipDone">Fertig</button></div>
+        <div id="toolChip" class="toolchip" hidden><span id="chipText"></span><button type="button" id="chipDone">Abbrechen</button></div>
       </div>
       <div id="printLeg"></div>
       <div class="hint"><span id="status" role="status">Bereit</span><span class="tasten">Entf löscht · Esc bricht ab</span></div>
@@ -295,10 +300,35 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   }
 
   function el(name,attrs={}){const n=document.createElementNS(NS,name);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n}
+  // Ziehen aus der Bausteinleiste: am Handy wischt die Leiste seitlich, also startet ein Zug nach oben
+  let neu=null, klickSperre={t:0,typ:null};
+  function inHalle(x,y){const r=hall.getBoundingClientRect();return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom}
+  document.addEventListener('pointermove',e=>{
+    if(!neu||e.pointerId!==neu.pid)return;
+    const dx=e.clientX-neu.x0, dy=e.clientY-neu.y0;
+    if(!neu.aktiv){
+      const schmal=matchMedia('(max-width:720px)').matches;
+      if(Math.hypot(dx,dy)<10||(schmal&&Math.abs(dy)<Math.abs(dx))){if(Math.hypot(dx,dy)>=10)neu=null;return}
+      neu.aktiv=true;
+      neu.geist=document.createElement('div');neu.geist.className='geist';
+      neu.geist.innerHTML=`<svg viewBox="0 0 40 32">${icons[neu.type]}</svg>`;document.body.append(neu.geist);
+    }
+    e.preventDefault();
+    neu.geist.style.left=e.clientX+'px';neu.geist.style.top=e.clientY+'px';
+    neu.geist.classList.toggle('drin',inHalle(e.clientX,e.clientY));
+  },{passive:false});
+  document.addEventListener('pointerup',e=>{
+    if(!neu||e.pointerId!==neu.pid)return;
+    const n=neu;neu=null;if(!n.aktiv)return;
+    n.geist.remove();klickSperre={t:Date.now(),typ:n.type};
+    if(inHalle(e.clientX,e.clientY)){setTool(null);addObject(n.type,svgPoint(e))}
+  });
+  document.addEventListener('pointercancel',e=>{if(neu&&e.pointerId===neu.pid){neu.geist?.remove();neu=null}});
   function iconButton(item){
     const b=document.createElement('button');b.type='button';b.className='tool';b.dataset.tool=item.type;b.setAttribute('aria-pressed','false');
     b.innerHTML=`<svg viewBox="0 0 40 32" aria-hidden="true">${item.icon}</svg><span>${item.label}</span>`;
-    b.addEventListener('click',()=>setTool(activeTool===item.type?null:item.type));
+    b.addEventListener('click',()=>{if(klickSperre.typ===item.type&&Date.now()-klickSperre.t<500)return;setTool(activeTool===item.type?null:item.type)});
+    b.addEventListener('pointerdown',e=>{if(e.isPrimary)neu={type:item.type,pid:e.pointerId,x0:e.clientX,y0:e.clientY,aktiv:false,geist:null}});
     return b;
   }
   flow.forEach(x=>document.getElementById('flowTools').append(iconButton(x)));
@@ -311,7 +341,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     document.querySelectorAll('.tool').forEach(b=>{const on=b.dataset.tool===type;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))});
     announce(type?`${labels[type]} gewählt`:'Bereit');
     document.getElementById('toolChip').hidden=!type;
-    if(type)document.getElementById('chipText').textContent=`${labels[type]} setzen`;
+    if(type)document.getElementById('chipText').textContent=`${labels[type]}: in die Halle tippen`;
     render();
   }
   // Am Handy im Hochformat liegt die Halle gedreht, damit Geräte groß genug zum Antippen sind.
@@ -324,14 +354,15 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     hall.classList.toggle('hoch',HOCH);
     if(HOCH)drehen.setAttribute('transform','translate(620 0) rotate(90)');else drehen.removeAttribute('transform');
     const cx=HOCH?310:500, cy=HOCH?500:310;
-    emptyBg.setAttribute('x',cx-145);emptyBg.setAttribute('y',cy-30);
+    emptyBg.setAttribute('x',HOCH?20:cx-215);emptyBg.setAttribute('width',HOCH?580:430);emptyBg.setAttribute('y',cy-(HOCH?38:30));emptyBg.setAttribute('height',HOCH?76:58);
     emptyState.setAttribute('x',cx);emptyState.setAttribute('y',cy+4);
-    emptyState.textContent=HOCH?'Wähle unten einen Baustein.':'Wähle links einen Baustein.';
+    emptyState.textContent=matchMedia('(max-width:720px)').matches?'Baustein antippen oder nach oben ziehen.':'Baustein antippen oder in die Halle ziehen.';
   }
   function svgPoint(evt){const p=hall.createSVGPoint();p.x=evt.clientX;p.y=evt.clientY;let q=p.matrixTransform(hall.getScreenCTM().inverse());if(HOCH)q={x:q.y,y:620-q.x};return{x:Math.max(58,Math.min(942,q.x)),y:Math.max(58,Math.min(562,q.y))}}
 
   const rotateActions=document.getElementById('rotateActions');
   function select(kind,id){
+    if(!id||!selected||selected.id!==id)barText.hidden=true;
     selected=id?{kind,id}:null;render();
     if(!selected){
       selectionName.textContent='Nichts ausgewählt';selectionInfo.textContent='Tippe auf ein Objekt.';
@@ -362,6 +393,8 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   document.getElementById('rotateLeftBtn').addEventListener('click',()=>rotateBy(-45));
   document.getElementById('rotateRightBtn').addEventListener('click',()=>rotateBy(45));
   function startRotate(e,o){
+    if(finger!==null&&finger!==e.pointerId)return;
+    finger=e.pointerId;
     select('object',o.id);
     rotateDrag={id:o.id,startRot:o.rot||0};
     hall.setPointerCapture(e.pointerId);
@@ -452,23 +485,26 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
 
   const objBar=document.getElementById('objBar'), barText=document.getElementById('barText'), wrap=hall.parentElement;
   function leisteZeigen(){
-    const g=selected&&selected.kind==='object'&&!(drag&&drag.moved)&&!rotateDrag?objectsLayer.querySelector(`[data-id="${selected.id}"]`):null;
+    const g=selected&&selected.kind==='object'&&!drag&&!rotateDrag?objectsLayer.querySelector(`[data-id="${selected.id}"]`):null;
     if(!g){objBar.hidden=true;barText.hidden=true;return}
     const o=model.objects.find(x=>x.id===selected.id);
-    document.getElementById('barLeft').hidden=document.getElementById('barRight').hidden=!ROTATABLE.has(o.type);
+    const drehbar=ROTATABLE.has(o.type)&&barText.hidden;
+    document.getElementById('barLeft').hidden=document.getElementById('barRight').hidden=!drehbar;
     objBar.hidden=false;
-    const r=(g.querySelector('.hit')||g).getBoundingClientRect(), w=wrap.getBoundingClientRect(), bw=objBar.offsetWidth;
-    let left=r.left-w.left+r.width/2;left=Math.max(bw/2+4,Math.min(w.width-bw/2-4,left));
-    const oben=r.top-w.top-6;
-    objBar.classList.toggle('unten',oben<objBar.offsetHeight+4);
-    objBar.style.left=left+'px';objBar.style.top=(oben<objBar.offsetHeight+4?r.bottom-w.top+6:oben)+'px';
+    const r=(g.querySelector('.hit')||g).getBoundingClientRect(), w=wrap.getBoundingClientRect(), bw=objBar.offsetWidth, bh=objBar.offsetHeight;
+    const mx=r.left+r.width/2-w.left, my=r.top+r.height/2-w.top;
+    const rad=45*hall.getScreenCTM().a*(HOCH?1.25:1);
+    const left=Math.max(bw/2+4,Math.min(w.width-bw/2-4,mx));
+    const unten=my-rad-6<bh+4;
+    objBar.classList.toggle('unten',unten);
+    objBar.style.left=left+'px';objBar.style.top=(unten?my+rad+6:my-rad-6)+'px';
   }
   document.getElementById('barDel').addEventListener('click',()=>removeSelected());
   document.getElementById('barLeft').addEventListener('click',()=>rotateBy(-45));
   document.getElementById('barRight').addEventListener('click',()=>rotateBy(45));
   document.getElementById('barLabel').addEventListener('click',()=>{
     const o=selected&&model.objects.find(x=>x.id===selected.id);if(!o)return;
-    barText.hidden=!barText.hidden;barText.value=o.text||'';leisteZeigen();if(!barText.hidden)barText.focus();
+    barText.hidden=!barText.hidden;barText.value=o.text||'';leisteZeigen();if(!barText.hidden)barText.focus({preventScroll:true});
   });
   barText.addEventListener('input',()=>{labelField.value=barText.value;labelField.dispatchEvent(new Event('input'))});
   barText.addEventListener('keydown',e=>{if(e.key==='Enter'){barText.hidden=true;barText.blur();leisteZeigen()}});
@@ -482,8 +518,24 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     box.innerHTML=benutzt.map(t=>`<span><svg viewBox="0 0 40 32">${icons[t]}</svg>${labels[t]}</span>`).join('');
   }
 
-  function startDrag(e,o){e.stopPropagation();select('object',o.id);const p=svgPoint(e);drag={id:o.id,dx:o.x-p.x,dy:o.y-p.y,startX:o.x,startY:o.y,moved:false};hall.setPointerCapture(e.pointerId)}
+  // Ein Finger zur Zeit: weitere Finger (Pinch, Handballen) werden ignoriert, sonst entstehen Doppelte
+  let finger=null, tippStart=null;
+  function startDrag(e,o){
+    e.stopPropagation();
+    if(finger!==null&&finger!==e.pointerId)return;
+    finger=e.pointerId;
+    const p=svgPoint(e);
+    drag={id:o.id,dx:o.x-p.x,dy:o.y-p.y,startX:o.x,startY:o.y,moved:false};
+    select('object',o.id);
+    hall.setPointerCapture(e.pointerId);
+  }
+  hall.addEventListener('pointerdown',e=>{
+    if(finger!==null&&finger!==e.pointerId)return;
+    if(!e.isPrimary)return;
+    finger=e.pointerId;tippStart={x:e.clientX,y:e.clientY};
+  });
   hall.addEventListener('pointermove',e=>{
+    if(e.pointerId!==finger)return;
     if(rotateDrag){
       const o=model.objects.find(x=>x.id===rotateDrag.id);if(!o)return;
       const p=svgPoint(e);
@@ -496,14 +548,17 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     const p=svgPoint(e),o=model.objects.find(x=>x.id===drag.id);if(!o)return;o.x=p.x+drag.dx;o.y=p.y+drag.dy;drag.moved=drag.moved||Math.hypot(o.x-drag.startX,o.y-drag.startY)>3;render();
   });
   hall.addEventListener('pointerup',e=>{
+    if(e.pointerId!==finger)return;
+    finger=null;
+    const tipp=tippStart;tippStart=null;
     if(rotateDrag){
       const o=model.objects.find(x=>x.id===rotateDrag.id);
       if(o){
         const endRot=o.rot,startRot=rotateDrag.startRot;
         o.rot=startRot;snapshot();o.rot=endRot;
-        announce('Gedreht');sichern();render();
+        announce('Gedreht');sichern();
       }
-      rotateDrag=null;
+      rotateDrag=null;render();
       return;
     }
     if(drag){
@@ -511,14 +566,23 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
       if(d.moved){
         const current=model.objects.find(x=>x.id===d.id);const nx=current.x,ny=current.y;
         current.x=d.startX;current.y=d.startY;snapshot();current.x=nx;current.y=ny;
-        announce(`${labels[current.type]} verschoben`);sichern();render();
+        announce(`${labels[current.type]} verschoben`);sichern();
       }
+      render();
       return;
     }
-    if(activeTool){const p=svgPoint(e);addObject(activeTool,p)}
+    // Nur ein echtes Tippen setzt ein Objekt, ein Wischen nicht. Danach ist der Baustein wieder aus.
+    if(!tipp||Math.hypot(e.clientX-tipp.x,e.clientY-tipp.y)>12)return;
+    if(activeTool){const typ=activeTool;setTool(null);addObject(typ,svgPoint(e))}
     else select(null,null);
   });
-  hall.addEventListener('pointercancel',()=>{drag=null;rotateDrag=null;render()});
+  hall.addEventListener('pointercancel',e=>{
+    if(e.pointerId!==finger)return;
+    finger=null;tippStart=null;
+    if(drag&&drag.moved){const o=model.objects.find(x=>x.id===drag.id);if(o){o.x=drag.startX;o.y=drag.startY}}
+    if(rotateDrag){const o=model.objects.find(x=>x.id===rotateDrag.id);if(o)o.rot=rotateDrag.startRot}
+    drag=null;rotateDrag=null;render();
+  });
 
   function removeSelected(){
     if(!selected)return;snapshot();
@@ -544,7 +608,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
     snapshot();model=leer();selected=null;setTool(null);select(null,null);announce('Plan zurückgesetzt');sichern();
   });
   document.getElementById('chipDone').addEventListener('click',()=>setTool(null));
-  document.getElementById('printBtn').addEventListener('click',()=>window.print());
+  document.getElementById('printBtn').addEventListener('click',()=>{const war=HOCH;if(war){modusSetzen(false);render()}window.print();if(war){modusSetzen(hochfrage.matches);render()}});
   // Druck und PNG immer quer
   addEventListener('beforeprint',()=>{if(HOCH){modusSetzen(false);render()}});
   addEventListener('afterprint',()=>{modusSetzen(hochfrage.matches);render()});
@@ -586,7 +650,7 @@ select.feld{border:1px solid var(--line);border-radius:10px;padding:8px 10px;bac
   });
 
   document.addEventListener('keydown',e=>{
-    if(e.target===labelField||e.target===titleField)return;
+    if(e.target.closest&&e.target.closest('input,textarea,select'))return;
     if((e.key==='Delete'||e.key==='Backspace')&&selected){e.preventDefault();removeSelected()}
     if(e.key==='Escape'){setTool(null);select(null,null)}
   });
